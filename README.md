@@ -1,5 +1,5 @@
 # ptw
-[![Build Status](https://www.travis-ci.org/RealPolitiX/ptw.svg?branch=master)]
+![Build Status](https://www.travis-ci.org/RealPolitiX/ptw.svg?branch=master)
 
 Python implementation of parametric time warping for nonlinear alignment of 1D signals
 
