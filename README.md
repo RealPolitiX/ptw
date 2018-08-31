@@ -5,7 +5,9 @@ Python implementation of parametric time warping for nonlinear alignment of 1D s
 
 
 
-The implementation is based on the origin algorithm proposed by Paul Eilers in the following publication,
+### Background
+
+The implementation is based on the original algorithm proposed by Paul Eilers in the following publication,
 
 P. H. C. Eilers, "Parametric time warping", *Anal. Chem.* **76** 404 (2004). [link](https://pubs.acs.org/doi/abs/10.1021/ac034800e)
 
