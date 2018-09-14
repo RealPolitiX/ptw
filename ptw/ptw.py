@@ -7,7 +7,7 @@ from numpy.linalg import lstsq
 
 def interpol(t, sig):
     """
-    Interpolation of 1D signal
+    Interpolation of 1D signal.
     """
 
     siglen = sig.size
@@ -17,7 +17,7 @@ def interpol(t, sig):
     ti = np.floor(t[siglim]).astype('int')
 
     tr = t[siglim] - ti
-    # Gradient of signal at ti
+    # Gradient of the signal at ti
     grad = sig[ti + 1] - sig[ti]
     # Interpolated signal
     siginterp = sig[ti] + tr[:, None]*grad
@@ -25,32 +25,52 @@ def interpol(t, sig):
     # The three output vectors have the same size
     return siginterp, siglim, grad
 
-def timewarp(siga, sigb, order=2, maxiter=100, tol=1e-6, **kwds):
+
+def basis(v, order, length):
     """
-    Polynomial warping of the coordinate axis
+    Polynomial basis construction.
     """
 
-    siglen = max(siga.size, sigb.size)
+    B = np.array([(v**p) / (length**(p-1)) for p in range(order+1)]).T
+
+    return B
+
+
+def pconvert(v, order, length, a):
+    """
+    Conversion formula for the positional correspondence.
+    """
+
+    B = basis(v, order, length)
+    conv = B.dot(a)
+
+    return conv
+
+
+def timeWarp(sigstill, sigmov, order=2, maxiter=100, tol=1e-6, **kwds):
+    """
+    Polynomial warping of the coordinate axis for signal alignment.
+    """
+
+    siglen = max(sigstill.size, sigmov.size)
     t = np.linspace(0, siglen, siglen)
 
     # Construct basis set
-    B = np.zeros((siglen, order+1))
-    B[:, 0] = 1.
-    B[:, 1] = t
-    B[:, 2] = (t/siglen)**2
-    #B[:, 3] = (t/siglen)**3
+    B = basis(t, order, siglen)
 
     # Initialize the a coefficients
-    a = kwds.pop('guess_coeffs', np.array([0., 1., 0.]))
+    ainit = np.zeros((order+1,))
+    ainit[1] += 1.
+    a = kwds.pop('guess_coeffs', ainit)
 
     rms_last = 0.
     for it in range(maxiter):
 
         w = B.dot(a)
-        xinterp, siglim, grad = interpol(w, siga)
+        xinterp, siglim, grad = interpol(w, sigstill)
 
         # Compute RMS residuals and check for convergence
-        sigdiff = sigb[siglim] - xinterp
+        sigdiff = sigmov[siglim] - xinterp
         rms = norm(sigdiff) / siglen
         drms = np.abs((rms - rms_last) / (rms + 1e-10))
         #print(drms)
@@ -65,7 +85,24 @@ def timewarp(siga, sigb, order=2, maxiter=100, tol=1e-6, **kwds):
         da = lstsq(Q, sigdiff, rcond=None)[0].ravel()
         a += da
 
-    a[2] /= siglen**2
-    #a[3] /= siglen**3
+    for i in range(2, order+1):
+        a[i] /= siglen**i
 
-    return w, siglim, a
+    return w, siglim, a, siglen
+
+
+def align(sigstill, sigmov, order=2, ret='result', **kwds):
+    """ Align two one-dimensional signals.
+    """
+
+    sigstill = np.atleast_2d(sigstill).T
+    sigmov = np.atleast_2d(sigmov).T
+    w, siglim, acoeffs, siglen = timeWarp(sigstill, sigmov, order=order, **kwds)
+    xsigstill, _, _ = interpol(w, sigstill)
+
+    if ret == 'result':
+        return acoeffs, xsigstill, sigmov[siglim]
+
+    elif ret == 'func':
+        pfunc = partial(pconvert, order=order, length=siglen, a=acoeffs)
+        return pfunc
