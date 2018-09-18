@@ -7,11 +7,24 @@ from numpy.linalg import lstsq
 
 def interpol(t, sig):
     """
-    Interpolation of 1D signal.
+    Interpolation of 1D signal on the new time axis.
+
+    :Parameters:
+        t : 1D array
+            The updated time axis.
+        sig : 1D array
+            Signal to be interpolated
+
+    :Returns:
+        siginterp : 1D array
+            Interpolated signal.
+        siglim : 1D bool array
+            Signal limits.
+        grad : 1D array
+            Signal gradient.
     """
 
     siglen = sig.size
-
     # Calculate the range of t points within limits
     siglim = (t > 0) & (t < siglen-1)
     ti = np.floor(t[siglim]).astype('int')
@@ -25,20 +38,39 @@ def interpol(t, sig):
     # The three output vectors have the same size
     return siginterp, siglim, grad
 
-
 def basis(v, order, length):
     """
     Polynomial basis construction.
+
+    :Parameters:
+        v : 1D array
+            Vector basis.
+        order : int
+            Highest polynomial order in the transform.
+        length : int
+            Length of the signal
+
+    :Return:
+        B : 2D array
+            Polynomial basis matrix.
     """
 
     B = np.array([(v**p) / (length**(p-1)) for p in range(order+1)]).T
 
     return B
 
-
 def pconvert(v, order, length, a):
     """
     Conversion formula for the positional correspondence.
+
+    :Parameters:
+        v, order, length -- see ptw.ptw.basis()
+        a : 1D array
+            Coefficients for the polynomial transform.
+
+    :Return:
+        conv : 1D array
+            Coordinates after the polynomial transform.
     """
 
     B = basis(v, order, length)
@@ -46,13 +78,12 @@ def pconvert(v, order, length, a):
 
     return conv
 
-
-def timeWarp(sigstill, sigmov, order=2, maxiter=100, tol=1e-6, **kwds):
+def timeWarp(sigfix, sigmov, order=2, maxiter=100, tol=1e-6, **kwds):
     """
     Polynomial warping of the coordinate axis for signal alignment.
     """
 
-    siglen = max(sigstill.size, sigmov.size)
+    siglen = max(sigfix.size, sigmov.size)
     t = np.linspace(0, siglen, siglen)
 
     # Construct basis set
@@ -67,7 +98,7 @@ def timeWarp(sigstill, sigmov, order=2, maxiter=100, tol=1e-6, **kwds):
     for it in range(maxiter):
 
         w = B.dot(a)
-        xinterp, siglim, grad = interpol(w, sigstill)
+        xinterp, siglim, grad = interpol(w, sigfix)
 
         # Compute RMS residuals and check for convergence
         sigdiff = sigmov[siglim] - xinterp
@@ -90,18 +121,38 @@ def timeWarp(sigstill, sigmov, order=2, maxiter=100, tol=1e-6, **kwds):
 
     return w, siglim, a, siglen
 
-
-def align(sigstill, sigmov, order=2, ret='result', **kwds):
-    """ Align two one-dimensional signals.
+def reshape1D(trace):
+    """ Reshape 1D trace to 2D with unitary dimension at position 1.
     """
 
-    sigstill = np.atleast_2d(sigstill).T
-    sigmov = np.atleast_2d(sigmov).T
-    w, siglim, acoeffs, siglen = timeWarp(sigstill, sigmov, order=order, **kwds)
-    xsigstill, _, _ = interpol(w, sigstill)
+    trsh = list(trace.shape)
+    if 1 in trsh:
+        if trsh[0] == 1:
+            trace = trace.T
+    elif 1 not in trsh:
+        trace = np.atleast_2d(trace).T
+
+    return trace
+
+def paralign(sigfix, sigmov, order=2, ret='result', **kwds):
+    """ Align two one-dimensional signals.
+
+    :Parameters:
+        sigfix, sigmov : 1D array, 1D array
+            Fixed and moving signal.
+        order : int | 2
+            Highest polynomial order in the transform.
+        ret : str | 'result'
+            Return options.
+        **kwds : keyword arguments
+    """
+
+    sigfix, sigmov = list(map(reshape1D, [sigfix, sigmov]))
+    w, siglim, acoeffs, siglen = timeWarp(sigfix, sigmov, order=order, **kwds)
+    xsigfix, _, _ = interpol(w, sigfix)
 
     if ret == 'result':
-        return acoeffs, xsigstill, sigmov[siglim]
+        return acoeffs, xsigfix, sigmov[siglim]
 
     elif ret == 'func':
         pfunc = partial(pconvert, order=order, length=siglen, a=acoeffs)
